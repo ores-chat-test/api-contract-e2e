@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "suite": "api-contract-e2e",
+  "status": "contract-only",
+  "surfaces": ["public", "customer", "admin", "internal"],
+  "environments": ["main-org", "test-org"],
+  "assertions": [
+    {
+      "id": "public-auth-boundary",
+      "description": "Public chat accepts only the deliberately anonymous request contract.",
+      "evidence": "contract"
+    },
+    {
+      "id": "customer-auth-boundary",
+      "description": "Customer chat requires the customer issuer and audience contract.",
+      "evidence": "contract"
+    },
+    {
+      "id": "admin-auth-boundary",
+      "description": "Administrator chat rejects customer and public authority contexts.",
+      "evidence": "contract"
+    },
+    {
+      "id": "internal-service-boundary",
+      "description": "Internal routes require service identity and are absent from public ingress.",
+      "evidence": "contract"
+    }
+  ],
+  "owners": ["ores-chat"]
+}
