@@ -15,4 +15,4 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: ores-chat-test/.github@45aac35f0d36c45acc61280282ad8ee6e8ae85c7
+      - uses: ores-chat-test/.github@45aac3517015fdfe2eee74ac53a6ae7fc397cf04
