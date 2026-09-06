@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.equivalent.schema.json",
+  "$defs": {
+    "Status": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "Status",
+      "type": "string",
+      "enum": ["on", "off"]
+    },
+    "Widget": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "Widget",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "$ref": "Status" },
+        "count": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["name", "status"],
+      "unevaluatedProperties": false
+    }
+  }
+}
