@@ -24,7 +24,7 @@ jobs:
           show-progress: false
 
       - name: Validate organization suite declaration
-        uses: ores-chat-test/.github@45aac35182334b37ce431b790d342d392dd73fc2
+        uses: ores-chat-test/.github@45aac3517015fdfe2eee74ac53a6ae7fc397cf04
         with:
           suite: suite.json
 
