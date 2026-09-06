@@ -65,7 +65,7 @@ runs:
         report: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/validator-report.json
         sarif: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/validator.sarif
         output_dir: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/generated
-        quiet: "true"
+        quiet: "false"
 
     - name: Execute production Rust parity slices
       if: inputs.run-rust-tests == 'true'
