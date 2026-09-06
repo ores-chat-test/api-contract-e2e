@@ -2,8 +2,16 @@
   "version": 1,
   "suite": "api-contract-e2e",
   "status": "contract-only",
-  "surfaces": ["public", "customer", "admin", "internal"],
-  "environments": ["main-org", "test-org"],
+  "surfaces": [
+    "public",
+    "customer",
+    "admin",
+    "internal"
+  ],
+  "environments": [
+    "main-org",
+    "test-org"
+  ],
   "assertions": [
     {
       "id": "public-auth-boundary",
@@ -24,7 +32,14 @@
       "id": "internal-service-boundary",
       "description": "Internal routes require service identity and are absent from public ingress.",
       "evidence": "contract"
+    },
+    {
+      "id": "peer-authority-convergence",
+      "description": "Hosted CI compares authored TypeSpec and JSON Schema through generated comparison evidence without mutating either authority.",
+      "evidence": "hosted"
     }
   ],
-  "owners": ["ores-chat"]
+  "owners": [
+    "ores-chat"
+  ]
 }
