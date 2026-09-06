@@ -26,7 +26,7 @@ jobs:
       - name: Validate organization suite declaration
         uses: ores-chat-test/.github@45aac3517015fdfe2eee74ac53a6ae7fc397cf04
         with:
-          suite: suite.json
+          suite-path: suite.json
 
       - name: Install Node.js for the pinned TypeSpec toolchain
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -37,17 +37,21 @@ jobs:
         run: python3 -m unittest -v tests/test_contract_guard.py
 
       - name: Execute convergent peer-authority fixture
+        id: convergent
+        continue-on-error: true
         uses: ./
         with:
           source-root: testdata/equivalent
           run-rust-tests: "false"
 
       - name: Prepare deliberate declaration drift
+        if: steps.convergent.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
           rm -rf /tmp/ores-chat-api-contract-drift
           cp -R testdata/equivalent /tmp/ores-chat-api-contract-drift
+          rm -rf /tmp/ores-chat-api-contract-drift/.ores-chat-test
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -65,6 +69,7 @@ jobs:
           PY
 
       - name: Execute drifted peer-authority fixture
+        if: steps.convergent.outcome == 'success'
         id: drift
         continue-on-error: true
         uses: ./
@@ -72,19 +77,23 @@ jobs:
           source-root: /tmp/ores-chat-api-contract-drift
           run-rust-tests: "false"
 
-      - name: Require the drifted fixture to fail closed
+      - name: Require positive-pass and negative-fail outcomes
         if: always()
         env:
+          CONVERGENT_OUTCOME: ${{ steps.convergent.outcome }}
           DRIFT_OUTCOME: ${{ steps.drift.outcome }}
         run: |
           set -euo pipefail
+          test "${CONVERGENT_OUTCOME}" = success
           test "${DRIFT_OUTCOME}" = failure
 
-      - name: Retain convergent sibling-org evidence
-        if: success()
+      - name: Retain sibling-org evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: api-contract-e2e-${{ github.run_id }}
-          path: testdata/equivalent/.ores-chat-test/api-contract-e2e
-          if-no-files-found: error
+          path: |
+            testdata/equivalent/.ores-chat-test/api-contract-e2e
+            /tmp/ores-chat-api-contract-drift/.ores-chat-test/api-contract-e2e
+          if-no-files-found: warn
           retention-days: 30
