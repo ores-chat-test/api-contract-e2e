@@ -15,7 +15,11 @@
       "properties": {
         "name": { "type": "string" },
         "status": { "$ref": "Status" },
-        "count": { "type": "integer", "minimum": 0 }
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
       },
       "required": ["name", "status"],
       "unevaluatedProperties": false
