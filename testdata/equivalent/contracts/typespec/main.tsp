@@ -1,7 +1,7 @@
 import "@typespec/json-schema";
 using TypeSpec.JsonSchema;
 
-namespace OresChatTest;
+namespace Example;
 
 @id("Status")
 enum Status {
