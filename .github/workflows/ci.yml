@@ -49,17 +49,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/ores-chat-api-contract-drift
-          cp -R testdata/equivalent /tmp/ores-chat-api-contract-drift
-          rm -rf /tmp/ores-chat-api-contract-drift/.ores-chat-test
+          mkdir -p tmp
+          drift_root="$(mktemp -d "$PWD/tmp/contract-drift.XXXXXX")"
+          cp -R testdata/equivalent/contracts "$drift_root/contracts"
+          printf 'ORES_CHAT_DRIFT_ROOT=%s\n' "$drift_root" >> "$GITHUB_ENV"
+          export ORES_CHAT_DRIFT_ROOT="$drift_root"
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
 
-          path = Path(
-              "/tmp/ores-chat-api-contract-drift/"
-              "contracts/json-schema/authored.schema.json"
-          )
+          path = Path(os.environ["ORES_CHAT_DRIFT_ROOT"]) / "contracts/json-schema/authored.schema.json"
           document = json.loads(path.read_text(encoding="utf-8"))
           document["$defs"]["Widget"]["required"].append("count")
           path.write_text(
@@ -74,18 +74,51 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          source-root: /tmp/ores-chat-api-contract-drift
+          source-root: ${{ env.ORES_CHAT_DRIFT_ROOT }}
           run-rust-tests: "false"
+
+      - name: Execute explicit JSON-number uint64 fixture
+        id: numeric
+        continue-on-error: true
+        uses: ./
+        with:
+          source-root: testdata/numeric
+          run-rust-tests: "false"
+          int64-strategy: number
+
+      - name: Reject a string encoding for an authored numeric contract
+        id: wrong-encoding
+        continue-on-error: true
+        uses: ./
+        with:
+          source-root: testdata/numeric
+          evidence-root: .ores-chat-test/wrong-encoding
+          run-rust-tests: "false"
+          int64-strategy: string
 
       - name: Require positive-pass and negative-fail outcomes
         if: always()
         env:
           CONVERGENT_OUTCOME: ${{ steps.convergent.outcome }}
           DRIFT_OUTCOME: ${{ steps.drift.outcome }}
+          NUMERIC_OUTCOME: ${{ steps.numeric.outcome }}
+          WRONG_ENCODING_OUTCOME: ${{ steps.wrong-encoding.outcome }}
         run: |
           set -euo pipefail
           test "${CONVERGENT_OUTCOME}" = success
           test "${DRIFT_OUTCOME}" = failure
+          test "${NUMERIC_OUTCOME}" = success
+          test "${WRONG_ENCODING_OUTCOME}" = failure
+
+      - name: Require semantic rejection, not a broken compiler or action
+        if: always()
+        run: |
+          set -euo pipefail
+          jq -e '.status == "stopped_for_evaluation" and .differential.summary.divergences > 0' \
+            "$ORES_CHAT_DRIFT_ROOT/.ores-chat-test/api-contract-e2e/validator-report.json"
+          jq -e '.status == "stopped_for_evaluation" and .differential.summary.divergences > 0' \
+            testdata/numeric/.ores-chat-test/wrong-encoding/validator-report.json
+          git diff --exit-code -- testdata
 
       - name: Retain sibling-org evidence
         if: always()
@@ -94,6 +127,8 @@ jobs:
           name: api-contract-e2e-${{ github.run_id }}
           path: |
             testdata/equivalent/.ores-chat-test/api-contract-e2e
-            /tmp/ores-chat-api-contract-drift/.ores-chat-test/api-contract-e2e
+            testdata/numeric/.ores-chat-test
+            tmp/contract-drift.*/.ores-chat-test/api-contract-e2e
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 30
