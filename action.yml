@@ -36,6 +36,9 @@ outputs:
   receipt:
     description: Path to the sibling-org acceptance receipt.
     value: ${{ steps.outputs.outputs.receipt }}
+  contract_ir:
+    description: Path to the parity-approved, non-authoritative Contract IR.
+    value: ${{ steps.outputs.outputs.contract_ir }}
 
 runs:
   using: composite
@@ -61,16 +64,39 @@ runs:
           --run-rust-tests "${RUN_RUST_TESTS}"
 
     - name: Compare TypeSpec A, generated JSON Schema B, and JSON Schema A
-      uses: ORESoftware/typespec-json-schema-validator@43541bbeea698b518aa0b6b9dc1a0f0aabfb1375
+      uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
       with:
         typespec: ${{ inputs.source-root }}/${{ inputs.typespec }}
         schema: ${{ inputs.source-root }}/${{ inputs.schema }}
         instances: ${{ inputs.source-root }}/${{ inputs.instances }}
         report: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/validator-report.json
         sarif: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/validator.sarif
+        contract_ir: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/contract-ir.json
         output_dir: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/generated
         int64_strategy: ${{ inputs.int64-strategy }}
         quiet: "false"
+
+    - name: Require a parity-approved, non-authoritative Contract IR
+      shell: bash
+      env:
+        SOURCE_ROOT: ${{ inputs.source-root }}
+        EVIDENCE_ROOT: ${{ inputs.evidence-root }}
+      run: |
+        set -euo pipefail
+        node - "${SOURCE_ROOT%/}/${EVIDENCE_ROOT#/}/validator-report.json" "${SOURCE_ROOT%/}/${EVIDENCE_ROOT#/}/contract-ir.json" <<'NODE'
+        const { readFileSync } = require('node:fs');
+        const report = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+        const ir = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+        if (report.schema !== 'ores.typespec-json-schema-validator.report/v1') throw new Error('unexpected TJSV report schema');
+        if (report.status !== 'passed' || report.zeroUnexplainedFindings !== true) throw new Error('TJSV parity did not pass');
+        if (report.authorities?.precedence !== 'none') throw new Error('authority precedence is forbidden');
+        if (report.authorities?.typespec?.authority !== 'independently-authored') throw new Error('TypeSpec authority role drift');
+        if (report.authorities?.jsonSchema?.authority !== 'independently-authored') throw new Error('JSON Schema authority role drift');
+        if (report.authorities?.typespec?.generatedJsonSchemaRole !== 'comparison-evidence-only') throw new Error('generated witness role drift');
+        if (ir.schema !== 'ores.typespec-json-schema-validator.contract-ir/v1') throw new Error('unexpected Contract IR schema');
+        if (ir.status !== 'passed' || ir.admissible !== true) throw new Error('Contract IR is not admissible');
+        if (ir.role !== 'downstream-derived-parity-artifact' || ir.editableAuthority !== false) throw new Error('Contract IR authority boundary drift');
+        NODE
 
     - name: Execute production Rust parity slices
       if: inputs.run-rust-tests == 'true'
@@ -106,7 +132,7 @@ runs:
           --receipt "${EVIDENCE_ROOT}/receipt.json" \
           --run-rust-tests "${RUN_RUST_TESTS}"
 
-    - name: Expose evidence path
+    - name: Expose evidence paths
       id: outputs
       shell: bash
       env:
@@ -114,5 +140,6 @@ runs:
         EVIDENCE_ROOT: ${{ inputs.evidence-root }}
       run: |
         set -euo pipefail
-        printf 'receipt=%s/%s/receipt.json\n' \
-          "${SOURCE_ROOT%/}" "${EVIDENCE_ROOT#/}" >> "${GITHUB_OUTPUT}"
+        root="${SOURCE_ROOT%/}/${EVIDENCE_ROOT#/}"
+        printf 'receipt=%s/receipt.json\n' "$root" >> "${GITHUB_OUTPUT}"
+        printf 'contract_ir=%s/contract-ir.json\n' "$root" >> "${GITHUB_OUTPUT}"
