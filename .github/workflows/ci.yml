@@ -33,8 +33,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run guard unit tests
-        run: python3 -m unittest -v tests/test_contract_guard.py
+      - name: Run guard and corpus unit tests
+        run: python3 -m unittest discover -v -s tests -p 'test_*.py'
 
       - name: Execute convergent peer-authority fixture
         id: convergent
@@ -42,6 +42,29 @@ jobs:
         uses: ./
         with:
           source-root: testdata/equivalent
+          run-rust-tests: "false"
+
+      - name: Prepare production-style slice fixture layout
+        if: steps.convergent.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp
+          slice_root="$(mktemp -d "$PWD/tmp/contract-slice.XXXXXX")"
+          cp -R testdata/equivalent/contracts "$slice_root/contracts"
+          mkdir -p "$slice_root/contracts/fixtures/support"
+          cp "$slice_root/contracts/fixtures/Widget/valid/minimal.json" \
+             "$slice_root/contracts/fixtures/support/Widget.json"
+          rm -rf "$slice_root/contracts/fixtures/Widget"
+          printf 'ORES_CHAT_SLICE_ROOT=%s\n' "$slice_root" >> "$GITHUB_ENV"
+
+      - name: Execute production-style slice fixture through normalized corpus
+        if: steps.convergent.outcome == 'success'
+        id: slice-layout
+        continue-on-error: true
+        uses: ./
+        with:
+          source-root: ${{ env.ORES_CHAT_SLICE_ROOT }}
           run-rust-tests: "false"
 
       - name: Prepare deliberate declaration drift
@@ -100,12 +123,14 @@ jobs:
         if: always()
         env:
           CONVERGENT_OUTCOME: ${{ steps.convergent.outcome }}
+          SLICE_LAYOUT_OUTCOME: ${{ steps.slice-layout.outcome }}
           DRIFT_OUTCOME: ${{ steps.drift.outcome }}
           NUMERIC_OUTCOME: ${{ steps.numeric.outcome }}
           WRONG_ENCODING_OUTCOME: ${{ steps.wrong-encoding.outcome }}
         run: |
           set -euo pipefail
           test "${CONVERGENT_OUTCOME}" = success
+          test "${SLICE_LAYOUT_OUTCOME}" = success
           test "${DRIFT_OUTCOME}" = failure
           test "${NUMERIC_OUTCOME}" = success
           test "${WRONG_ENCODING_OUTCOME}" = failure
@@ -118,6 +143,8 @@ jobs:
             "$ORES_CHAT_DRIFT_ROOT/.ores-chat-test/api-contract-e2e/validator-report.json"
           jq -e '.status == "stopped_for_evaluation" and .differential.summary.divergences > 0' \
             testdata/numeric/.ores-chat-test/wrong-encoding/validator-report.json
+          jq -e '.schema == "ores-chat-test.api-contract-e2e.normalized-corpus/v1" and (.entries | length) == 1 and .entries[0].target == "Widget/support--Widget.json"' \
+            "$ORES_CHAT_SLICE_ROOT/.ores-chat-test/api-contract-e2e/normalized-corpus.json"
           git diff --exit-code -- testdata
 
       - name: Retain sibling-org evidence
@@ -128,6 +155,7 @@ jobs:
           path: |
             testdata/equivalent/.ores-chat-test/api-contract-e2e
             testdata/numeric/.ores-chat-test
+            tmp/contract-slice.*/.ores-chat-test/api-contract-e2e
             tmp/contract-drift.*/.ores-chat-test/api-contract-e2e
           include-hidden-files: true
           if-no-files-found: warn
