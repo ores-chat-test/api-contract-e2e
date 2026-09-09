@@ -64,7 +64,7 @@ runs:
           --run-rust-tests "${RUN_RUST_TESTS}"
 
     - name: Compare TypeSpec A, generated JSON Schema B, and JSON Schema A
-      uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
+      uses: ORESoftware/typespec-json-schema-validator@24e3bb322b8d7c9cd2e0c7dd185d659ad3fd7328
       with:
         typespec: ${{ inputs.source-root }}/${{ inputs.typespec }}
         schema: ${{ inputs.source-root }}/${{ inputs.schema }}
