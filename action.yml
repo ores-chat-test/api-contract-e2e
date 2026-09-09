@@ -63,12 +63,29 @@ runs:
           --manifest "${EVIDENCE_ROOT}/authored-inputs.json" \
           --run-rust-tests "${RUN_RUST_TESTS}"
 
+    - name: Derive declaration-indexed instance corpus
+      shell: bash
+      env:
+        SOURCE_ROOT: ${{ inputs.source-root }}
+        SCHEMA_INPUT: ${{ inputs.schema }}
+        INSTANCES_INPUT: ${{ inputs.instances }}
+        EVIDENCE_ROOT: ${{ inputs.evidence-root }}
+      run: |
+        set -euo pipefail
+        python3 "${GITHUB_ACTION_PATH}/scripts/normalize_corpus.py" \
+          --source-root "${SOURCE_ROOT}" \
+          --instances "${INSTANCES_INPUT}" \
+          --schema "${SCHEMA_INPUT}" \
+          --evidence-root "${EVIDENCE_ROOT}" \
+          --output "${EVIDENCE_ROOT}/normalized-instances"
+        test -s "${SOURCE_ROOT%/}/${EVIDENCE_ROOT#/}/normalized-corpus.json"
+
     - name: Compare TypeSpec A, generated JSON Schema B, and JSON Schema A
       uses: ORESoftware/typespec-json-schema-validator@24e3bb322b8d7c9cd2e0c7dd185d659ad3fd7328
       with:
         typespec: ${{ inputs.source-root }}/${{ inputs.typespec }}
         schema: ${{ inputs.source-root }}/${{ inputs.schema }}
-        instances: ${{ inputs.source-root }}/${{ inputs.instances }}
+        instances: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/normalized-instances
         report: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/validator-report.json
         sarif: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/validator.sarif
         contract_ir: ${{ inputs.source-root }}/${{ inputs.evidence-root }}/contract-ir.json
