@@ -81,7 +81,7 @@ runs:
         test -s "${SOURCE_ROOT%/}/${EVIDENCE_ROOT#/}/normalized-corpus.json"
 
     - name: Compare TypeSpec A, generated JSON Schema B, and JSON Schema A
-      uses: ORESoftware/typespec-json-schema-validator@24e3bb322b8d7c9cd2e0c7dd185d659ad3fd7328
+      uses: ORESoftware/typespec-json-schema-validator@bd7f988f110d4f8cd244d1388f6cbc09b5d349ff
       with:
         typespec: ${{ inputs.source-root }}/${{ inputs.typespec }}
         schema: ${{ inputs.source-root }}/${{ inputs.schema }}
