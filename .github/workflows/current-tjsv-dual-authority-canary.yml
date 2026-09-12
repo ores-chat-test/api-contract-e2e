@@ -1,0 +1,150 @@
+name: current-tjsv-dual-authority-canary
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-tjsv-dual-authority-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  peer-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact canary source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Node.js for the pinned TypeSpec toolchain
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Execute current TJSV over independent peer authorities
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        with:
+          typespec: testdata/equivalent/contracts/typespec/main.tsp
+          schema: testdata/equivalent/contracts/json-schema
+          instances: testdata/equivalent/contracts/fixtures
+          report: tmp/current-tjsv/pass/report.json
+          sarif: tmp/current-tjsv/pass/report.sarif
+          contract_ir: tmp/current-tjsv/pass/contract-ir.json
+          output_dir: tmp/current-tjsv/pass/generated
+          int64_strategy: string
+          quiet: "false"
+
+      - name: Prove TypeSpec A and JSON Schema A remain equal independent authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .status == "passed" and
+            .zeroUnexplainedFindings == true and
+            .authorities.precedence == "none" and
+            .authorities.typespec.authority == "independently-authored" and
+            .authorities.jsonSchema.authority == "independently-authored" and
+            .authorities.typespec.generatedJsonSchemaRole == "comparison-evidence-only"
+          ' tmp/current-tjsv/pass/report.json
+          test -s tmp/current-tjsv/pass/contract-ir.json
+          find tmp/current-tjsv/pass/generated -type f -name '*.json' -print -quit | grep -q .
+          git diff --exit-code -- \
+            testdata/equivalent/contracts/typespec \
+            testdata/equivalent/contracts/json-schema
+
+      - name: Prepare JSON-Schema-only drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/json-schema-drift
+          cp -R testdata/equivalent/contracts tmp/json-schema-drift/contracts
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('tmp/json-schema-drift/contracts/json-schema/authored.schema.json')
+          document = json.loads(path.read_text(encoding='utf-8'))
+          document['$defs']['Widget']['required'].append('count')
+          path.write_text(json.dumps(document, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
+      - name: Reject JSON-Schema-only drift
+        id: json-schema-drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        with:
+          typespec: tmp/json-schema-drift/contracts/typespec/main.tsp
+          schema: tmp/json-schema-drift/contracts/json-schema
+          instances: tmp/json-schema-drift/contracts/fixtures
+          report: tmp/current-tjsv/json-schema-drift/report.json
+          sarif: tmp/current-tjsv/json-schema-drift/report.sarif
+          contract_ir: tmp/current-tjsv/json-schema-drift/contract-ir.json
+          output_dir: tmp/current-tjsv/json-schema-drift/generated
+          int64_strategy: string
+          quiet: "false"
+
+      - name: Prepare TypeSpec-only drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/typespec-drift
+          cp -R testdata/equivalent/contracts tmp/typespec-drift/contracts
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tmp/typespec-drift/contracts/typespec/main.tsp')
+          text = path.read_text(encoding='utf-8')
+          old = '  count?: int32;'
+          new = '  count: int32;'
+          if old not in text:
+              raise SystemExit('expected optional count declaration was not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Reject TypeSpec-only drift after transpilation
+        id: typespec-drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        with:
+          typespec: tmp/typespec-drift/contracts/typespec/main.tsp
+          schema: tmp/typespec-drift/contracts/json-schema
+          instances: tmp/typespec-drift/contracts/fixtures
+          report: tmp/current-tjsv/typespec-drift/report.json
+          sarif: tmp/current-tjsv/typespec-drift/report.sarif
+          contract_ir: tmp/current-tjsv/typespec-drift/contract-ir.json
+          output_dir: tmp/current-tjsv/typespec-drift/generated
+          int64_strategy: string
+          quiet: "false"
+
+      - name: Require both one-sided authority drifts to fail closed
+        if: always()
+        env:
+          JSON_SCHEMA_DRIFT_OUTCOME: ${{ steps.json-schema-drift.outcome }}
+          TYPESPEC_DRIFT_OUTCOME: ${{ steps.typespec-drift.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$JSON_SCHEMA_DRIFT_OUTCOME" = failure
+          test "$TYPESPEC_DRIFT_OUTCOME" = failure
+          jq -e '.status == "stopped_for_evaluation" and (.findings | length) > 0' \
+            tmp/current-tjsv/json-schema-drift/report.json
+          jq -e '.status == "stopped_for_evaluation" and (.findings | length) > 0' \
+            tmp/current-tjsv/typespec-drift/report.json
+          find tmp/current-tjsv/json-schema-drift/generated -type f -name '*.json' -print -quit | grep -q .
+          find tmp/current-tjsv/typespec-drift/generated -type f -name '*.json' -print -quit | grep -q .
+          git diff --exit-code -- testdata
+
+      - name: Retain dual-authority canary evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: current-tjsv-dual-authority-${{ github.run_id }}
+          path: tmp/current-tjsv
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
