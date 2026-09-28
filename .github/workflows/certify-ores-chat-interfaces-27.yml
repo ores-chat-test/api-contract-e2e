@@ -1,0 +1,166 @@
+name: certify ores-chat-interfaces 27 exact head
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/certify-ores-chat-interfaces-27.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_REPOSITORY: ores-chat/ores-chat-interfaces
+  SOURCE_SHA: 2e58bfd748238c355d2618670280ed8aa4c104e2
+  TJSV_SHA: 26c3b2c84ed58fd8cb110b14c917beeacb93804c
+  TJSV_PACKAGE: https://github.com/ORESoftware/typespec-json-schema-validator/archive/26c3b2c84ed58fd8cb110b14c917beeacb93804c.tar.gz
+
+jobs:
+  peer-authority-canary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out immutable source candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 1
+          show-progress: false
+      - name: Verify immutable source candidate
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Generate Schema B and compare peer authorities
+        uses: ORESoftware/typespec-json-schema-validator@26c3b2c84ed58fd8cb110b14c917beeacb93804c
+        with:
+          typespec: test/fixtures/schema-authority-canary/main.tsp
+          schema: test/fixtures/schema-authority-canary/authored.schema.json
+          report: .typespec-json-schema-validator/report.json
+          contract_ir: .typespec-json-schema-validator/contract-ir.json
+          output_dir: .typespec-json-schema-validator/generated
+          max_probes: "64"
+      - name: Require canonical consumer admission
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@26c3b2c84ed58fd8cb110b14c917beeacb93804c
+        with:
+          contract_ir: .typespec-json-schema-validator/contract-ir.json
+          report: .typespec-json-schema-validator/report.json
+          typespec: test/fixtures/schema-authority-canary/main.tsp
+          schema: test/fixtures/schema-authority-canary/authored.schema.json
+          generated_schema: .typespec-json-schema-validator/generated/typespec.generated.schema.json
+          expected_declarations: '["OreSchemaAuthority.AuthorityKind","OreSchemaAuthority.PeerAuthorityRegistration"]'
+      - name: Authored canary remains untouched
+        run: git diff --exit-code -- test/fixtures/schema-authority-canary/
+
+  knowledge-access:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out immutable source candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 1
+          show-progress: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+      - name: Verify immutable source candidate
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Positive peer-authority proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/tjsv/positive
+          npx --yes --package="$TJSV_PACKAGE" tjsv check \
+            --typespec=contracts/knowledge-access/main.tsp \
+            --schema=contracts/knowledge-access/authored.schema.json \
+            --instances=contracts/knowledge-access/instances \
+            --report=target/tjsv/positive/report.json \
+            --sarif=target/tjsv/positive/report.sarif \
+            --output-dir=target/tjsv/positive/generated-schema-b \
+            --max-probes=128 \
+            --int64-strategy=number \
+            --seal-object-schemas=true
+      - name: Negative authorization-plane drift proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/tjsv/drift
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          source = Path('contracts/knowledge-access/authored.schema.json')
+          target = Path('target/tjsv/drift/authored.schema.json')
+          document = json.loads(source.read_text())
+          values = document['$defs']['KnowledgePlane']['enum']
+          assert values == ['public', 'customer', 'internal', 'administrator']
+          document['$defs']['KnowledgePlane']['enum'] = ['public', 'customer', 'internal']
+          target.write_text(json.dumps(document, indent=2) + '\n')
+          PY
+          set +e
+          npx --yes --package="$TJSV_PACKAGE" tjsv check \
+            --typespec=contracts/knowledge-access/main.tsp \
+            --schema=target/tjsv/drift/authored.schema.json \
+            --instances=contracts/knowledge-access/instances \
+            --report=target/tjsv/drift/report.json \
+            --sarif=target/tjsv/drift/report.sarif \
+            --output-dir=target/tjsv/drift/generated-schema-b \
+            --max-probes=128 \
+            --int64-strategy=number \
+            --seal-object-schemas=true \
+            --quiet
+          status=$?
+          set -e
+          test "$status" -eq 2
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('target/tjsv/drift/report.json', 'utf8'));
+          if (report.status !== 'stopped_for_evaluation') throw new Error(`expected stopped_for_evaluation, got ${report.status}`);
+          const serialized = JSON.stringify(report.findings ?? []);
+          if (!serialized.includes('KnowledgePlane') && !serialized.includes('administrator')) throw new Error('authorization-plane drift was not attributable');
+          NODE
+      - name: Authored knowledge authorities remain untouched
+        run: git diff --exit-code -- contracts/knowledge-access
+
+  ores-chat-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out immutable source candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 1
+          show-progress: false
+      - name: Verify immutable source candidate
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Parse example TOML and enforce secret-default policy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, tomllib
+          doc = tomllib.loads(pathlib.Path('examples/.ores-chat.toml').read_text())
+          assert doc['version'] == 1
+          assert doc['strict'] is True
+          assert doc['flags2env']['contract'] == '.cli-flags.toml'
+          assert doc['flags2env']['require_audit'] is True
+          assert doc['flags2env']['precedence'] == 'argv-over-env'
+          for binding in doc['env']:
+              if binding.get('secret'):
+                  assert 'default' not in binding, f"secret default: {binding['name']}"
+          PY
+      - name: Admit independent TypeSpec and JSON Schema authorities
+        uses: ORESoftware/typespec-json-schema-validator@26c3b2c84ed58fd8cb110b14c917beeacb93804c
+        with:
+          typespec: contracts/ores-chat-config/ores-chat-config.tsp
+          schema: contracts/ores-chat-config/ores-chat-config.schema.json
+          report: .typespec-json-schema-validator/ores-chat-config-report.json
+          contract_ir: .typespec-json-schema-validator/ores-chat-config-ir.json
+          output_dir: .typespec-json-schema-validator/ores-chat-config-generated
+      - name: Authored config authorities remain untouched
+        run: git diff --exit-code -- contracts/ores-chat-config
