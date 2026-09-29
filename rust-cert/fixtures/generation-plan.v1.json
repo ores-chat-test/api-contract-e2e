@@ -1,0 +1,63 @@
+{
+  "schema": "ores.client-generation-plan/v1",
+  "repository": "ores-chat/ores-chat-clients",
+  "authorities": {
+    "public_openapi": "openapi/ores-chat-v1.yaml",
+    "internal_openapi": "openapi/ores-chat-internal-v1.yaml",
+    "contract_ir": "contract-admission/contract-ir-consumer.json",
+    "operation_codec_contract": "ORESoftware/api-docs",
+    "protobuf_field_ledger": "ORESoftware/api-docs/idl/protobuf.lock.json",
+    "generated_is_authority": false
+  },
+  "rpc": {
+    "generator": "ORESoftware/ores-stack",
+    "transport_interfaces": "ORESoftware/ores-interfaces",
+    "transport_implementation": "ORESoftware/ores-http-clients",
+    "terminal_unary_method": "makeCall",
+    "terminal_stream_method": "doStream",
+    "parallel_generation_required": true,
+    "overwrite_legacy_path": false
+  },
+  "wire": {
+    "structured_codecs": [
+      {"name": "json", "content_type": "application/json"},
+      {"name": "messagepack", "content_type": "application/msgpack"},
+      {"name": "cbor", "content_type": "application/cbor"},
+      {"name": "protobuf", "content_type": "application/x-protobuf"}
+    ],
+    "raw_binary_content_type": "application/octet-stream",
+    "request_codec_header": "content-type",
+    "response_codec_header": "accept",
+    "response_metadata_required": ["status", "content-type"],
+    "decode_requires_success_status": true,
+    "decode_requires_content_type_match": true,
+    "unsupported_request_status": 415,
+    "unacceptable_response_status": 406,
+    "no_content_sniffing": true,
+    "no_explicit_codec_fallback": true,
+    "preserve_native_bytes": true,
+    "max_unary_response_bytes": 2097152,
+    "streaming_preserves_chunk_boundaries": true,
+    "streaming_requires_backpressure": true,
+    "compression_is_separate_from_serialization": true
+  },
+  "tiers": {
+    "tier_1": ["rust", "typescript", "dart", "gleam"],
+    "extended": ["go", "python", "java", "kotlin", "swift", "csharp", "elixir", "erlang", "ruby", "php", "scala", "cpp", "c", "zig"]
+  },
+  "implemented": ["rust", "typescript", "dart", "wasm"],
+  "rules": {
+    "minimum_declared_runtime_count": 15,
+    "generated_directory": "generated",
+    "wire_naming": "snake_case",
+    "headers": "canonical-lowercase-case-insensitive-input",
+    "preserve_wire_compatibility": true,
+    "require_subtree_imports": true,
+    "require_contract_digest_binding": true,
+    "require_conformance_before_release": true,
+    "require_codec_parity_before_release": true,
+    "require_response_metadata_validation_before_release": true,
+    "protobuf_numbers_are_ledger_owned": true,
+    "raw_binary_is_not_a_structured_codec": true
+  }
+}
