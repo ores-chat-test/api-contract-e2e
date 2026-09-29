@@ -56,7 +56,11 @@ fn accept_headers_allow_json(headers: &HeaderMap) -> bool {
 fn accepts_json(value: &str) -> bool {
     for item in value.split(',') {
         let mut pieces = item.split(';');
-        let media_type = pieces.next().unwrap_or_default().trim().to_ascii_lowercase();
+        let media_type = pieces
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
         if media_type.is_empty() {
             continue;
         }
@@ -78,7 +82,10 @@ fn accepts_json(value: &str) -> bool {
             continue;
         }
 
-        if matches!(media_type.as_str(), JSON_MEDIA_TYPE | "application/*" | "*/*") {
+        if matches!(
+            media_type.as_str(),
+            JSON_MEDIA_TYPE | "application/*" | "*/*"
+        ) {
             return true;
         }
     }
@@ -120,13 +127,25 @@ mod tests {
     #[test]
     fn multiple_accept_lines_are_combined_semantically() {
         let mut headers = HeaderMap::new();
-        headers.append(header::ACCEPT, HeaderValue::from_static("application/msgpack"));
-        headers.append(header::ACCEPT, HeaderValue::from_static("application/json;q=0.2"));
+        headers.append(
+            header::ACCEPT,
+            HeaderValue::from_static("application/msgpack"),
+        );
+        headers.append(
+            header::ACCEPT,
+            HeaderValue::from_static("application/json;q=0.2"),
+        );
         assert!(accept_headers_allow_json(&headers));
 
         let mut rejected = HeaderMap::new();
-        rejected.append(header::ACCEPT, HeaderValue::from_static("application/msgpack"));
-        rejected.append(header::ACCEPT, HeaderValue::from_static("application/json;q=0"));
+        rejected.append(
+            header::ACCEPT,
+            HeaderValue::from_static("application/msgpack"),
+        );
+        rejected.append(
+            header::ACCEPT,
+            HeaderValue::from_static("application/json;q=0"),
+        );
         assert!(!accept_headers_allow_json(&rejected));
     }
 
@@ -140,7 +159,9 @@ mod tests {
         let plan: Value = serde_json::from_str(include_str!("../fixtures/generation-plan.v1.json"))
             .expect("generation plan fixture must parse");
         let wire = &plan["wire"];
-        let codecs = wire["structured_codecs"].as_array().expect("structured codecs");
+        let codecs = wire["structured_codecs"]
+            .as_array()
+            .expect("structured codecs");
         let names: Vec<&str> = codecs
             .iter()
             .map(|entry| entry["name"].as_str().expect("codec name"))
@@ -162,7 +183,10 @@ mod tests {
         );
         assert_eq!(wire["decode_requires_success_status"], true);
         assert_eq!(wire["decode_requires_content_type_match"], true);
-        assert_eq!(plan["implemented"], serde_json::json!(["rust", "typescript", "dart", "wasm"]));
+        assert_eq!(
+            plan["implemented"],
+            serde_json::json!(["rust", "typescript", "dart", "wasm"])
+        );
         assert_eq!(plan["rules"]["raw_binary_is_not_a_structured_codec"], true);
         assert_eq!(plan["rules"]["protobuf_numbers_are_ledger_owned"], true);
     }
