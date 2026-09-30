@@ -1,0 +1,16 @@
+{
+  "client_contract": {
+    "repository": "ores-chat/ores-chat-clients",
+    "pull_request": 26,
+    "head_commit": "f37bc5b45b74b22613ff3475cc0e4bb9f896b17d",
+    "path": "clients/generation-plan.v1.json",
+    "blob_sha": "0227e50386cf0ef0eb8e06ba325e9d24df8bf93b"
+  },
+  "server_guard": {
+    "repository": "ores-chat/ores-chat-api-server.rs",
+    "pull_request": 15,
+    "head_commit": "3d14336e59929e6e50b4634f2e293c3ed6441cb5",
+    "path": "src/rpc_media_guard.rs",
+    "blob_sha": "2fe1cfe7fda812889073d47f94e10524002f438a"
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "ores-chat-codec-certification"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+axum = "0.8"
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+needless_return = "allow"
