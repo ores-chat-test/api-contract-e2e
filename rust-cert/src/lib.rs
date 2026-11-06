@@ -15,12 +15,7 @@ pub async fn enforce_rpc_media_contract(request: Request, next: Next) -> Respons
         return next.run(request).await;
     }
 
-    if !request
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(is_json_content_type)
-    {
+    if !headers_have_single_json_content_type(request.headers()) {
         return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
     }
 
@@ -31,11 +26,40 @@ pub async fn enforce_rpc_media_contract(request: Request, next: Next) -> Respons
     return next.run(request).await;
 }
 
+fn headers_have_single_json_content_type(headers: &HeaderMap) -> bool {
+    let mut headers = headers.get_all(header::CONTENT_TYPE).iter();
+    let Some(value) = headers.next() else {
+        return false;
+    };
+    // Content-Type is a singleton. A proxy and an origin must not disagree
+    // about which codec is authoritative when duplicate values are supplied.
+    if headers.next().is_some() {
+        return false;
+    }
+    value.to_str().ok().is_some_and(is_json_content_type)
+}
+
 fn is_json_content_type(value: &str) -> bool {
-    return value
-        .split(';')
-        .next()
-        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case(JSON_MEDIA_TYPE));
+    let mut parts = value.split(';');
+    if !parts.next().is_some_and(|part| part.trim().eq_ignore_ascii_case(JSON_MEDIA_TYPE)) {
+        return false;
+    }
+    let mut saw_charset = false;
+    for part in parts {
+        let Some((key, raw_value)) = part.trim().split_once('=') else {
+            return false;
+        };
+        let charset = raw_value.trim();
+        if !key.trim().eq_ignore_ascii_case("charset")
+            || saw_charset
+            || !(charset.eq_ignore_ascii_case("utf-8")
+                || charset.eq_ignore_ascii_case("\"utf-8\""))
+        {
+            return false;
+        }
+        saw_charset = true;
+    }
+    true
 }
 
 fn accept_headers_allow_json(headers: &HeaderMap) -> bool {
@@ -138,6 +162,38 @@ mod tests {
         assert!(!is_json_content_type("application/x-protobuf"));
         assert!(!is_json_content_type("application/octet-stream"));
         assert!(!is_json_content_type("text/json"));
+    }
+
+    #[test]
+    fn content_type_duplicate_headers_fail_closed() {
+        let mut headers = HeaderMap::new();
+        assert!(!headers_have_single_json_content_type(&headers));
+        headers.append(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        assert!(headers_have_single_json_content_type(&headers));
+        headers.append(header::CONTENT_TYPE, HeaderValue::from_static("application/msgpack"));
+        assert!(!headers_have_single_json_content_type(&headers));
+        let mut repeated = HeaderMap::new();
+        repeated.append(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        repeated.append(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        assert!(!headers_have_single_json_content_type(&repeated));
+    }
+
+    #[test]
+    fn content_type_charset_and_parameters_fail_closed() {
+        assert!(is_json_content_type("APPLICATION/JSON; CHARSET=UTF-8"));
+        assert!(is_json_content_type("application/json; charset=\"utf-8\""));
+        for bad in [
+            "application/json; charset=utf-16",
+            "application/json; charset=ascii",
+            "application/json; charset=utf-8; charset=utf-8",
+            "application/json; charset=utf-8; unexpected=yes",
+            "application/json; malformed",
+            "application/json;",
+            "application/json, application/msgpack",
+            "application/json; charset=\"utf-8",
+        ] {
+            assert!(!is_json_content_type(bad), "accepted {bad:?}");
+        }
     }
 
     #[test]
