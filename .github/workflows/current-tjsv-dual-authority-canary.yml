@@ -28,7 +28,7 @@ jobs:
           node-version: 22
 
       - name: Execute current TJSV over independent peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@075b2e81f7d8e95ddd2a8792523996ececc61a43
         with:
           typespec: testdata/equivalent/contracts/typespec/main.tsp
           schema: testdata/equivalent/contracts/json-schema
@@ -39,6 +39,18 @@ jobs:
           output_dir: tmp/current-tjsv/pass/generated
           int64_strategy: string
           quiet: "false"
+
+      - name: Require a passing production npm audit before accepting comparator results
+        shell: bash
+        env:
+          AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+        run: |
+          set -euo pipefail
+          test -s "$AUDIT_RECEIPT"
+          jq -e '.schema == "tjsv-npm-production-audit-receipt/v1"
+            and .status == "passed"
+            and .zeroUnwaivedHighOrCritical == true
+            and ((.unwaivedHighOrCritical // []) | length) == 0' "$AUDIT_RECEIPT"
 
       - name: Prove TypeSpec A and JSON Schema A remain equal independent authorities
         shell: bash
@@ -76,7 +88,7 @@ jobs:
       - name: Reject JSON-Schema-only drift
         id: json-schema-drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@075b2e81f7d8e95ddd2a8792523996ececc61a43
         with:
           typespec: tmp/json-schema-drift/contracts/typespec/main.tsp
           schema: tmp/json-schema-drift/contracts/json-schema
@@ -108,7 +120,7 @@ jobs:
       - name: Reject TypeSpec-only drift after transpilation
         id: typespec-drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@075b2e81f7d8e95ddd2a8792523996ececc61a43
         with:
           typespec: tmp/typespec-drift/contracts/typespec/main.tsp
           schema: tmp/typespec-drift/contracts/json-schema
@@ -144,7 +156,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: current-tjsv-dual-authority-${{ github.run_id }}
-          path: tmp/current-tjsv
+          path: |
+            tmp/current-tjsv
+            ${{ runner.temp }}/tjsv-npm-audit-receipt.json
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 30
