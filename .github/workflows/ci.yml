@@ -119,6 +119,18 @@ jobs:
           run-rust-tests: "false"
           int64-strategy: string
 
+      - name: Require a passing production-dependency audit receipt
+        if: always()
+        env:
+          AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+        run: |
+          set -euo pipefail
+          test -s "$AUDIT_RECEIPT"
+          jq -e '.schema == "tjsv-npm-production-audit-receipt/v1"
+            and .status == "passed"
+            and .zeroUnwaivedHighOrCritical == true
+            and ((.unwaivedHighOrCritical // []) | length) == 0' "$AUDIT_RECEIPT"
+
       - name: Require positive-pass and negative-fail outcomes
         if: always()
         env:
@@ -154,6 +166,7 @@ jobs:
           name: api-contract-e2e-${{ github.run_id }}
           path: |
             testdata/equivalent/.ores-chat-test/api-contract-e2e
+            ${{ runner.temp }}/tjsv-npm-audit-receipt.json
             testdata/numeric/.ores-chat-test
             tmp/contract-slice.*/.ores-chat-test/api-contract-e2e
             tmp/contract-drift.*/.ores-chat-test/api-contract-e2e
