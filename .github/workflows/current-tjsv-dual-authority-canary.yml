@@ -19,8 +19,22 @@ jobs:
       - name: Check out exact canary source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           show-progress: false
+
+      - name: Verify exact source revision and tree identity
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --quiet --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
+          echo "SOURCE_HEAD=$EXPECTED_HEAD"
+          echo "SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')"
 
       - name: Install Node.js for the pinned TypeSpec toolchain
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
