@@ -53,6 +53,7 @@ fn accept_headers_allow_json(headers: &HeaderMap) -> bool {
     !saw_accept || accepted_json_quality(ranges.into_iter()).is_some_and(|q| q > 0)
 }
 
+#[cfg(test)]
 fn accepts_json(value: &str) -> bool {
     accepted_json_quality(value.split(',')).is_some_and(|q| q > 0)
 }
@@ -107,13 +108,15 @@ fn accepted_json_quality<'a>(items: impl Iterator<Item = &'a str>) -> Option<u16
         }
         selected = match selected {
             Some((existing_specificity, existing_quality))
-                if existing_specificity > specificity => {
-                    Some((existing_specificity, existing_quality))
-                }
+                if existing_specificity > specificity =>
+            {
+                Some((existing_specificity, existing_quality))
+            }
             Some((existing_specificity, existing_quality))
-                if existing_specificity == specificity => {
-                    Some((specificity, existing_quality.min(quality)))
-                }
+                if existing_specificity == specificity =>
+            {
+                Some((specificity, existing_quality.min(quality)))
+            }
             _ => Some((specificity, quality)),
         };
     }
@@ -199,7 +202,10 @@ mod tests {
     fn explicit_denial_across_multiple_accept_header_lines_is_binding() {
         let mut headers = HeaderMap::new();
         headers.append(header::ACCEPT, HeaderValue::from_static("*/*;q=1"));
-        headers.append(header::ACCEPT, HeaderValue::from_static("application/json;q=0"));
+        headers.append(
+            header::ACCEPT,
+            HeaderValue::from_static("application/json;q=0"),
+        );
         assert!(!accept_headers_allow_json(&headers));
     }
 
