@@ -41,7 +41,10 @@ fn headers_have_single_json_content_type(headers: &HeaderMap) -> bool {
 
 fn is_json_content_type(value: &str) -> bool {
     let mut parts = value.split(';');
-    if !parts.next().is_some_and(|part| part.trim().eq_ignore_ascii_case(JSON_MEDIA_TYPE)) {
+    if !parts
+        .next()
+        .is_some_and(|part| part.trim().eq_ignore_ascii_case(JSON_MEDIA_TYPE))
+    {
         return false;
     }
     let mut saw_charset = false;
@@ -52,8 +55,7 @@ fn is_json_content_type(value: &str) -> bool {
         let charset = raw_value.trim();
         if !key.trim().eq_ignore_ascii_case("charset")
             || saw_charset
-            || !(charset.eq_ignore_ascii_case("utf-8")
-                || charset.eq_ignore_ascii_case("\"utf-8\""))
+            || !(charset.eq_ignore_ascii_case("utf-8") || charset.eq_ignore_ascii_case("\"utf-8\""))
         {
             return false;
         }
@@ -168,13 +170,25 @@ mod tests {
     fn content_type_duplicate_headers_fail_closed() {
         let mut headers = HeaderMap::new();
         assert!(!headers_have_single_json_content_type(&headers));
-        headers.append(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.append(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
         assert!(headers_have_single_json_content_type(&headers));
-        headers.append(header::CONTENT_TYPE, HeaderValue::from_static("application/msgpack"));
+        headers.append(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/msgpack"),
+        );
         assert!(!headers_have_single_json_content_type(&headers));
         let mut repeated = HeaderMap::new();
-        repeated.append(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        repeated.append(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        repeated.append(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        repeated.append(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
         assert!(!headers_have_single_json_content_type(&repeated));
     }
 
